@@ -17,7 +17,7 @@ trainer_params:
   gpus:
     - 0
   max_epochs:
-    stage1: 1
+    stage1: 2000
     stage2: 10000
 
 
@@ -32,12 +32,13 @@ decoder:
 
 
 VQ-VAE:
-  codebook_size: 128
+  codebook_size: 32
   decay: 0.8
   commitment_weight: 1.
   codebook_dim: 64
   emb_dropout: 0.
-  perceptual_loss_weight: 0
+  kmeans_init: True
+  threshold_ema_dead_code: 2
 
 
 MaskGIT:

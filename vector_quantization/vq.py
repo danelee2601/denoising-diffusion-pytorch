@@ -251,7 +251,6 @@ class VectorQuantize(nn.Module):
             eps=1e-5,
             kmeans_init=False,
             kmeans_iters=10,
-            use_cosine_sim=False,
             threshold_ema_dead_code=0,
             channel_last=True,
             accept_image_fmap=False,
