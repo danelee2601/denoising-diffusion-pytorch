@@ -6,8 +6,10 @@ import math
 
 import numpy as np
 import pandas as pd
+import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
+from torchvision import transforms as T
 
 from utils import get_root_dir
 
@@ -16,7 +18,11 @@ class DatasetImporter(object):
     """
     Import a dataset and store it in the instance.
     """
-    def __init__(self, dirname, train_ratio: float = 0.7, data_scaling: bool = True, **kwargs):
+    def __init__(self,
+                 dirname,
+                 train_ratio: float = 0.7,
+                 data_scaling: bool = True,
+                 **kwargs):
         """
         :param data_scaling
         """
@@ -79,6 +85,7 @@ class GeoDataset(Dataset):
 
     def __getitem__(self, idx):
         x = self.X[idx, :]  # (c h w)
+        x = torch.from_numpy(x).float()
         return x
 
     def __len__(self):
@@ -91,7 +98,8 @@ if __name__ == "__main__":
 
     # data pipeline
     dataset_importer = DatasetImporter("dataset/facies")
-    dataset = GeoDataset("train", dataset_importer)
+    dataset = GeoDataset\
+        ("train", dataset_importer)
     data_loader = DataLoader(dataset, batch_size=32, num_workers=0, shuffle=True)
 
     # get a mini-batch of samples

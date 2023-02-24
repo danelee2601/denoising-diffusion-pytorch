@@ -6,10 +6,14 @@ from functools import partial
 from collections import namedtuple
 from multiprocessing import cpu_count
 
+import numpy as np
+import matplotlib.pyplot as plt
 import torch
 from torch import nn, einsum
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
+# from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
+from torchvision.utils import _log_api_usage_once, make_grid
 
 from torch.optim import Adam
 from lion_pytorch import Lion
@@ -26,6 +30,10 @@ from ema_pytorch import EMA
 from accelerate import Accelerator
 
 from denoising_diffusion_pytorch.version import __version__
+
+from preprocessing.preprocess import DatasetImporter
+from preprocessing.preprocess import GeoDataset as Dataset
+from utils import quantize
 
 # constants
 
@@ -269,11 +277,11 @@ class Attention(nn.Module):
 class Unet(nn.Module):
     def __init__(
         self,
+        in_channels,
         dim,
         init_dim = None,
         out_dim = None,
         dim_mults=(1, 2, 4, 8),
-        channels = 3,
         self_condition = False,
         resnet_block_groups = 8,
         learned_variance = False,
@@ -285,9 +293,9 @@ class Unet(nn.Module):
 
         # determine dimensions
 
-        self.channels = channels
+        self.channels = in_channels
         self.self_condition = self_condition
-        input_channels = channels * (2 if self_condition else 1)
+        input_channels = in_channels * (2 if self_condition else 1)
 
         init_dim = default(init_dim, dim)
         self.init_conv = nn.Conv2d(input_channels, init_dim, 7, padding = 3)
@@ -348,7 +356,7 @@ class Unet(nn.Module):
                 Upsample(dim_out, dim_in) if not is_last else  nn.Conv2d(dim_out, dim_in, 3, padding = 1)
             ]))
 
-        default_out_dim = channels * (1 if not learned_variance else 2)
+        default_out_dim = in_channels * (1 if not learned_variance else 2)
         self.out_dim = default(out_dim, default_out_dim)
 
         self.final_res_block = block_klass(dim * 2, dim, time_emb_dim = time_dim)
@@ -443,7 +451,7 @@ class GaussianDiffusion(nn.Module):
         self,
         model,
         *,
-        image_size,
+        in_size,
         timesteps = 1000,
         sampling_timesteps = None,
         loss_type = 'l1',
@@ -463,7 +471,7 @@ class GaussianDiffusion(nn.Module):
         self.channels = self.model.channels
         self.self_condition = self.model.self_condition
 
-        self.image_size = image_size
+        self.in_size = in_size
 
         self.objective = objective
 
@@ -672,9 +680,9 @@ class GaussianDiffusion(nn.Module):
 
     @torch.no_grad()
     def sample(self, batch_size = 16, return_all_timesteps = False):
-        image_size, channels = self.image_size, self.channels
+        in_size, channels = self.in_size, self.channels
         sample_fn = self.p_sample_loop if not self.is_ddim_sampling else self.ddim_sample
-        return sample_fn((batch_size, channels, image_size, image_size), return_all_timesteps = return_all_timesteps)
+        return sample_fn((batch_size, channels, in_size, in_size), return_all_timesteps = return_all_timesteps)
 
     @torch.no_grad()
     def interpolate(self, x1, x2, t = None, lam = 0.5):
@@ -752,54 +760,78 @@ class GaussianDiffusion(nn.Module):
         return loss.mean()
 
     def forward(self, img, *args, **kwargs):
-        b, c, h, w, device, img_size, = *img.shape, img.device, self.image_size
+        b, c, h, w, device, img_size, = *img.shape, img.device, self.in_size
         assert h == img_size and w == img_size, f'height and width of image must be {img_size}'
         t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
 
         img = self.normalize(img)
         return self.p_losses(img, t, *args, **kwargs)
 
-# dataset classes
-
-class Dataset(Dataset):
-    def __init__(
-        self,
-        folder,
-        image_size,
-        exts = ['jpg', 'jpeg', 'png', 'tiff'],
-        augment_horizontal_flip = False,
-        convert_image_to = None
-    ):
-        super().__init__()
-        self.folder = folder
-        self.image_size = image_size
-        self.paths = [p for ext in exts for p in Path(f'{folder}').glob(f'**/*.{ext}')]
-
-        maybe_convert_fn = partial(convert_image_to_fn, convert_image_to) if exists(convert_image_to) else nn.Identity()
-
-        self.transform = T.Compose([
-            T.Lambda(maybe_convert_fn),
-            T.Resize(image_size),
-            T.RandomHorizontalFlip() if augment_horizontal_flip else nn.Identity(),
-            T.CenterCrop(image_size),
-            T.ToTensor()
-        ])
-
-    def __len__(self):
-        return len(self.paths)
-
-    def __getitem__(self, index):
-        path = self.paths[index]
-        img = Image.open(path)
-        return self.transform(img)
-
 # trainer class
+
+@torch.no_grad()
+def save_image(
+    tensor: torch.FloatTensor,
+    fp,
+) -> None:
+    """
+    :param tensor (b 1 h w)
+    :param fp: file name for the saved image.
+    """
+    # if not torch.jit.is_scripting() and not torch.jit.is_tracing():
+    #     _log_api_usage_once(save_image)
+    # grid = make_grid(tensor, **kwargs)
+    # # Add 0.5 after unnormalizing to [0, 255] to round to nearest integer
+    # ndarr = grid.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
+    # im = Image.fromarray(ndarr)
+    # im.save(fp, format=format)
+
+    n_samples = tensor.shape[0]
+    n_rows = int(np.ceil(np.sqrt(n_samples)))
+    fig, axes = plt.subplots(n_rows, n_rows, figsize=(12, 12))
+    axes = axes.flatten()
+
+    data = tensor.numpy()  # (b 1 h w)
+    data = np.flip(data, axis=2)  # (b 1 h w)
+    data = data.squeeze()  # (b h w)
+    for i in range(n_samples):
+        d = data[i]  # (h w)
+        axes[i].imshow(d)
+        axes[i].set_xticks([])
+        axes[i].set_yticks([])
+    plt.tight_layout()
+    plt.savefig(fp)
+    plt.close()
+
+
+    # # data = np.flip(data, axis=0)
+    #
+    # cmap = plt.cm.jet
+    # norm = plt.Normalize(vmin=data.min(), vmax=data.max())
+    #
+    # for i in range(data.shape[0]):
+    #     x = data[i].squeeze()  # (h w)
+    #
+    # # map the normalized data to colors
+    # # image is now RGBA (512x512x4)
+    # image = cmap(norm(data))
+    #
+    # # RGBA -> RGB
+    # image = image[:, :, :-1]
+    #
+    # # save the image
+    # im2 = Image.fromarray((image * 255).astype(np.uint8))
+    # im2.save(fp)
+
 
 class Trainer(object):
     def __init__(
         self,
         diffusion_model,
-        folder,
+        config: dict,
+        pretrained_encoder,
+        pretrained_decoder,
+        pretrained_vq,
         *,
         train_batch_size = 16,
         gradient_accumulate_every = 1,
@@ -827,6 +859,9 @@ class Trainer(object):
 
         self.accelerator.native_amp = amp
 
+        self.pretrained_encoder = pretrained_encoder
+        self.pretrained_decoder = pretrained_decoder
+        self.pretrained_vq = pretrained_vq
         self.model = diffusion_model
 
         assert has_int_squareroot(num_samples), 'number of samples must have an integer square root'
@@ -837,11 +872,12 @@ class Trainer(object):
         self.gradient_accumulate_every = gradient_accumulate_every
 
         self.train_num_steps = train_num_steps
-        self.image_size = diffusion_model.image_size
+        self.in_size = diffusion_model.in_size
 
         # dataset and dataloader
-
-        self.ds = Dataset(folder, self.image_size, augment_horizontal_flip = augment_horizontal_flip, convert_image_to = convert_image_to)
+        # self.ds = Dataset(folder, self.in_size, augment_horizontal_flip = augment_horizontal_flip, convert_image_to = convert_image_to)
+        dataset_importer = DatasetImporter(**config['dataset'])
+        self.ds = Dataset('train', dataset_importer)
         dl = DataLoader(self.ds, batch_size = train_batch_size, shuffle = True, pin_memory = True, num_workers = cpu_count())
 
         dl = self.accelerator.prepare(dl)
@@ -913,10 +949,12 @@ class Trainer(object):
                 total_loss = 0.
 
                 for _ in range(self.gradient_accumulate_every):
-                    data = next(self.dl).to(device)
+                    x = next(self.dl).to(device)  # I assume (b c h w)
+                    z = self.pretrained_encoder(x)  # (b d h' w')
+                    z_q, indices, vq_loss, perplexity = quantize(z, self.pretrained_vq)
 
                     with self.accelerator.autocast():
-                        loss = self.model(data)
+                        loss = self.model(z_q)
                         loss = loss / self.gradient_accumulate_every
                         total_loss += loss.item()
 
@@ -945,8 +983,11 @@ class Trainer(object):
                             batches = num_to_groups(self.num_samples, self.batch_size)
                             all_images_list = list(map(lambda n: self.ema.ema_model.sample(batch_size=n), batches))
 
-                        all_images = torch.cat(all_images_list, dim = 0)
-                        utils.save_image(all_images, str(self.results_folder / f'sample-{milestone}.png'), nrow = int(math.sqrt(self.num_samples)))
+                        all_images = torch.cat(all_images_list, dim = 0)  # (b d h' w')
+                        all_images = self.pretrained_decoder(all_images)  # (b c h w)
+                        all_images = all_images.cpu().detach()
+                        all_images = all_images.argmax(dim=1)[:,None,:,:].float()  # (b 1 h w)
+                        save_image(all_images, str(self.results_folder / f'sample-{milestone}.png'))
                         self.save(milestone)
 
                 pbar.update(1)

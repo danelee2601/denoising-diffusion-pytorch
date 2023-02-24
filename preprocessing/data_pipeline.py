@@ -1,5 +1,5 @@
 from torch.utils.data import DataLoader
-from preprocessing.preprocess_ucr import DatasetImporter, GeoDataset
+from preprocessing.preprocess import DatasetImporter, GeoDataset
 
 
 def build_data_pipeline(batch_size, dataset_importer: DatasetImporter, config: dict, kind: str) -> DataLoader:

@@ -9,7 +9,7 @@ from einops import rearrange
 from encoder_decoders.vq_vae_encdec import VQVAEEncoder, VQVAEDecoder
 from experiments.exp_base import ExpBase, detach_the_unnecessary
 from vector_quantization import VectorQuantize
-from utils import compute_downsample_rate, freeze, timefreq_to_time, time_to_timefreq, zero_pad_low_freq, zero_pad_high_freq, quantize
+from utils import freeze, timefreq_to_time, time_to_timefreq, zero_pad_low_freq, zero_pad_high_freq, quantize
 
 
 class ExpVQVAE(ExpBase):
@@ -29,12 +29,13 @@ class ExpVQVAE(ExpBase):
         # self.n_fft = config['VQ-VAE']['n_fft']
         dim = config['encoder']['dim']
         in_channels = config['dataset']['in_channels']
-        downsampled_width = config['encoder']['downsampled_width']
-        downsample_rate = compute_downsample_rate(input_length, downsampled_width)
+        # downsampled_width = config['encoder']['downsampled_width']
+        # downsample_rate = compute_downsample_rate(input_length, downsampled_width)
+        downsampling_rate = config['encoder']['downsampling_rate']
 
         # encoder
-        self.encoder = VQVAEEncoder(dim, in_channels, downsample_rate, config['encoder']['n_resnet_blocks'])
-        self.decoder = VQVAEDecoder(dim, in_channels, downsample_rate, config['decoder']['n_resnet_blocks'])
+        self.encoder = VQVAEEncoder(dim, in_channels, downsampling_rate, config['encoder']['n_resnet_blocks'])
+        self.decoder = VQVAEDecoder(dim, in_channels, downsampling_rate, config['decoder']['n_resnet_blocks'])
         self.vq_model = VectorQuantize(dim, **config['VQ-VAE'])
 
     def forward(self, batch):

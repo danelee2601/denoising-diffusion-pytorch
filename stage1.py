@@ -12,7 +12,7 @@ from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import DataLoader
 
 from experiments.exp_vq_vae import ExpVQVAE
-from preprocessing.preprocess_ucr import DatasetImporter
+from preprocessing.preprocess import DatasetImporter
 from preprocessing.data_pipeline import build_data_pipeline
 from utils import get_root_dir, save_model, load_yaml_param_settings
 

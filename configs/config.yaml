@@ -6,7 +6,7 @@ dataset:
   data_scaling: True
   batch_sizes:
     stage1: 512
-    stage2: 256
+    stage2: 32
   num_workers: 0
 
 exp_params:
@@ -24,7 +24,7 @@ trainer_params:
 encoder:
   dim: 64
   n_resnet_blocks: 4
-  downsampled_width: 8
+  downsampling_rate: 16  # the actual compression rate is `downsampling_rate ** 2` given both height and width.
 
 decoder:
   dim: 64
@@ -37,23 +37,25 @@ VQ-VAE:
   commitment_weight: 1.
   codebook_dim: 64
   emb_dropout: 0.
-  kmeans_init: True
-  threshold_ema_dead_code: 2
+  kmeans_init: False
+  threshold_ema_dead_code: 0
+
+diffusion:
 
 
-MaskGIT:
-  choice_temperatures: # for masking
-    lf: 4
-    hf: 4
-  stochastic_sampling: 1  # from (Lee et al., 2022)
-  T: 10
-  prior_model:
-    hidden_dim: 256
-    n_layers: 4
-    heads: 2
-    ff_mult: 1
-    use_rmsnorm: True
-    p_unconditional: 0.2
-
-class_guidance:
-  guidance_scale: 1.
+#MaskGIT:
+#  choice_temperatures: # for masking
+#    lf: 4
+#    hf: 4
+#  stochastic_sampling: 1  # from (Lee et al., 2022)
+#  T: 10
+#  prior_model:
+#    hidden_dim: 256
+#    n_layers: 4
+#    heads: 2
+#    ff_mult: 1
+#    use_rmsnorm: True
+#    p_unconditional: 0.2
+#
+#class_guidance:
+#  guidance_scale: 1.
