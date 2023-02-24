@@ -6,6 +6,7 @@ from functools import partial
 from collections import namedtuple
 from multiprocessing import cpu_count
 
+import wandb
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -446,6 +447,7 @@ def sigmoid_beta_schedule(timesteps, start = -3, end = 3, tau = 1, clamp_min = 1
     betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
     return torch.clip(betas, 0, 0.999)
 
+
 class GaussianDiffusion(nn.Module):
     def __init__(
         self,
@@ -778,14 +780,6 @@ def save_image(
     :param tensor (b 1 h w)
     :param fp: file name for the saved image.
     """
-    # if not torch.jit.is_scripting() and not torch.jit.is_tracing():
-    #     _log_api_usage_once(save_image)
-    # grid = make_grid(tensor, **kwargs)
-    # # Add 0.5 after unnormalizing to [0, 255] to round to nearest integer
-    # ndarr = grid.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
-    # im = Image.fromarray(ndarr)
-    # im.save(fp, format=format)
-
     n_samples = tensor.shape[0]
     n_rows = int(np.ceil(np.sqrt(n_samples)))
     fig, axes = plt.subplots(n_rows, n_rows, figsize=(12, 12))
@@ -802,26 +796,6 @@ def save_image(
     plt.tight_layout()
     plt.savefig(fp)
     plt.close()
-
-
-    # # data = np.flip(data, axis=0)
-    #
-    # cmap = plt.cm.jet
-    # norm = plt.Normalize(vmin=data.min(), vmax=data.max())
-    #
-    # for i in range(data.shape[0]):
-    #     x = data[i].squeeze()  # (h w)
-    #
-    # # map the normalized data to colors
-    # # image is now RGBA (512x512x4)
-    # image = cmap(norm(data))
-    #
-    # # RGBA -> RGB
-    # image = image[:, :, :-1]
-    #
-    # # save the image
-    # im2 = Image.fromarray((image * 255).astype(np.uint8))
-    # im2.save(fp)
 
 
 class Trainer(object):
@@ -878,10 +852,11 @@ class Trainer(object):
         # self.ds = Dataset(folder, self.in_size, augment_horizontal_flip = augment_horizontal_flip, convert_image_to = convert_image_to)
         dataset_importer = DatasetImporter(**config['dataset'])
         self.ds = Dataset('train', dataset_importer)
-        dl = DataLoader(self.ds, batch_size = train_batch_size, shuffle = True, pin_memory = True, num_workers = cpu_count())
+        # self.dl = DataLoader(self.ds, batch_size = train_batch_size, shuffle = True, pin_memory = True, num_workers = cpu_count())
+        self.dl = DataLoader(self.ds, batch_size=train_batch_size, shuffle=True, pin_memory=True, num_workers=config['dataset']['num_workers'])
 
-        dl = self.accelerator.prepare(dl)
-        self.dl = cycle(dl)
+        self.dl = self.accelerator.prepare(self.dl)
+        self.dl = cycle(self.dl)
 
         # optimizer
 
@@ -962,6 +937,7 @@ class Trainer(object):
 
                 accelerator.clip_grad_norm_(self.model.parameters(), 1.0)
                 pbar.set_description(f'loss: {total_loss:.4f}')
+                wandb.log({'loss': loss})
 
                 accelerator.wait_for_everyone()
 

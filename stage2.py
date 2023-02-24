@@ -1,6 +1,7 @@
 import os
 from argparse import ArgumentParser
 
+import wandb
 import torch
 from denoising_diffusion_pytorch import Unet, GaussianDiffusion, Trainer
 from encoder_decoders.vq_vae_encdec import VQVAEEncoder, VQVAEDecoder
@@ -66,6 +67,7 @@ if __name__ == '__main__':
     ).cuda()
 
     # train
+    wandb.init(project='GeoDiffusion-stage2',config=config)
     trainer = Trainer(
         diffusion,
         config,
@@ -78,8 +80,8 @@ if __name__ == '__main__':
         gradient_accumulate_every=2,  # gradient accumulation steps
         ema_decay=0.995,  # exponential moving average decay
         amp=False,  # turn on mixed precision
-        fp16=True,
-        save_and_sample_every=100, #1000,
+        fp16=False,
+        save_and_sample_every=1000, #1000,
         num_samples=9,
         augment_horizontal_flip=False
     )
