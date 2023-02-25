@@ -75,6 +75,17 @@ class ExpVQVAE(ExpBase):
             wandb.log({"x vs xhat (training)": wandb.Image(plt)})
             plt.close()
 
+        # plot histogram of z
+        r = np.random.rand()
+        if self.training and r <= 0.05:
+            z_q = z_q.detach().cpu().flatten().numpy()
+
+            fig, ax = plt.subplots(1, 1, figsize=(5, 2))
+            ax.hist(z_q, bins='auto')
+            plt.tight_layout()
+            wandb.log({"hist(z_1)": wandb.Image(plt)})
+            plt.close()
+
         return categorical_recons_loss, vq_loss, perplexity
 
     def training_step(self, batch, batch_idx):
