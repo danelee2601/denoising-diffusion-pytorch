@@ -6,7 +6,7 @@ dataset:
   data_scaling: True
   batch_sizes:
     stage1: 512
-    stage2: 32
+    stage2: 256
   num_workers: 0
 
 exp_params:
@@ -24,23 +24,25 @@ trainer_params:
 encoder:
   dim: 64
   n_resnet_blocks: 4
-  downsampling_rate: 16  # the actual compression rate is `downsampling_rate ** 2` given both height and width.
+  downsampling_rate: 4  # the actual compression rate is `downsampling_rate ** 2` given both height and width.
 
 decoder:
   dim: 64
   n_resnet_blocks: 4
 
 
-VQ-VAE:
-  codebook_size: 32
+VQ-VAE:  # hyper-parameter choice is made based on the LDM paper
+  codebook_size: 256
   decay: 0.8
   commitment_weight: 1.
-  codebook_dim: 64
+  codebook_dim: 4
   emb_dropout: 0.
   kmeans_init: False
   threshold_ema_dead_code: 0
 
 diffusion:
+  unet:
+    self_condition: True
 
 
 #MaskGIT:

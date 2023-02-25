@@ -6,6 +6,7 @@ from functools import partial
 from collections import namedtuple
 from multiprocessing import cpu_count
 
+import einops
 import wandb
 import numpy as np
 import matplotlib.pyplot as plt
@@ -35,6 +36,8 @@ from denoising_diffusion_pytorch.version import __version__
 from preprocessing.preprocess import DatasetImporter
 from preprocessing.preprocess import GeoDataset as Dataset
 from utils import quantize
+from encoder_decoders.vq_vae_encdec import VQVAEEncoder, VQVAEDecoder
+from vector_quantization import VectorQuantize
 
 # constants
 
@@ -367,7 +370,6 @@ class Unet(nn.Module):
         if self.self_condition:
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
             x = torch.cat((x_self_cond, x), dim = 1)
-
         x = self.init_conv(x)
         r = x.clone()
 
@@ -463,7 +465,7 @@ class GaussianDiffusion(nn.Module):
         p2_loss_weight_gamma = 0., # p2 loss weight, from https://arxiv.org/abs/2204.00227 - 0 is equivalent to weight of 1 across time - 1. is recommended
         p2_loss_weight_k = 1,
         ddim_sampling_eta = 0.,
-        auto_normalize = True
+        auto_normalize = False
     ):
         super().__init__()
         assert not (type(self) == GaussianDiffusion and model.channels != model.out_dim)
@@ -600,12 +602,21 @@ class GaussianDiffusion(nn.Module):
 
         return ModelPrediction(pred_noise, x_start)
 
-    def p_mean_variance(self, x, t, x_self_cond = None, clip_denoised = True):
+    def p_mean_variance(self, x, t, x_self_cond = None, clip_denoised = False, dynamic_thresholding = True):
+        assert np.sum([clip_denoised, dynamic_thresholding]) <= 1, "Only one of `clip_denoised` and `dynamic_thresholding` must be used, not both."
+
         preds = self.model_predictions(x, t, x_self_cond)
-        x_start = preds.pred_x_start
+        x_start = preds.pred_x_start  # (b d h' w')
 
         if clip_denoised:
             x_start.clamp_(-1., 1.)
+        elif dynamic_thresholding:  # from the Imagen paper
+            x_start_flat = einops.rearrange(x_start, 'b d h w -> b (d h w)')
+            percentile = 0.95  # hyper-parameter
+            s = torch.quantile(x_start_flat, percentile, dim=1)  # (b,)
+            s = torch.nn.functional.relu(s - 1) + 1  # same as max(s, 1); (b,)
+            s = s[:,None,None,None]  # (b 1 1 1)
+            x_start = torch.clip(x_start, min=-s, max=s) / s
 
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start = x_start, x_t = x, t = t)
         return model_mean, posterior_variance, posterior_log_variance, x_start
@@ -614,7 +625,9 @@ class GaussianDiffusion(nn.Module):
     def p_sample(self, x, t: int, x_self_cond = None):
         b, *_, device = *x.shape, x.device
         batched_times = torch.full((b,), t, device = x.device, dtype = torch.long)
-        model_mean, _, model_log_variance, x_start = self.p_mean_variance(x = x, t = batched_times, x_self_cond = x_self_cond, clip_denoised = True)
+        model_mean, _, model_log_variance, x_start = self.p_mean_variance(x = x,
+                                                                          t = batched_times,
+                                                                          x_self_cond = x_self_cond)
         noise = torch.randn_like(x) if t > 0 else 0. # no noise if t == 0
         pred_img = model_mean + (0.5 * model_log_variance).exp() * noise
         return pred_img, x_start
@@ -640,6 +653,7 @@ class GaussianDiffusion(nn.Module):
 
     @torch.no_grad()
     def ddim_sample(self, shape, return_all_timesteps = False):
+        assert False, "not ready yet for GeoDiffusion."
         batch, device, total_timesteps, sampling_timesteps, eta, objective = shape[0], self.betas.device, self.num_timesteps, self.sampling_timesteps, self.ddim_sampling_eta, self.objective
 
         times = torch.linspace(-1, total_timesteps - 1, steps = sampling_timesteps + 1)   # [-1, 0, 1, 2, ..., T-1] when sampling_timesteps == total_timesteps
@@ -803,9 +817,9 @@ class Trainer(object):
         self,
         diffusion_model,
         config: dict,
-        pretrained_encoder,
-        pretrained_decoder,
-        pretrained_vq,
+        pretrained_encoder: VQVAEEncoder,
+        pretrained_decoder: VQVAEDecoder,
+        pretrained_vq: VectorQuantize,
         *,
         train_batch_size = 16,
         gradient_accumulate_every = 1,
@@ -926,7 +940,8 @@ class Trainer(object):
                 for _ in range(self.gradient_accumulate_every):
                     x = next(self.dl).to(device)  # I assume (b c h w)
                     z = self.pretrained_encoder(x)  # (b d h' w')
-                    z_q, indices, vq_loss, perplexity = quantize(z, self.pretrained_vq)
+                    z_q, indices, vq_loss, perplexity = quantize(z, self.pretrained_vq, return_z_q_before_proj_out=True)
+                    z_q = z_q / z_q.abs().max(dim=1, keepdim=True).values  # normalize z_q to be within [-1, 1]
 
                     with self.accelerator.autocast():
                         loss = self.model(z_q)
@@ -960,6 +975,11 @@ class Trainer(object):
                             all_images_list = list(map(lambda n: self.ema.ema_model.sample(batch_size=n), batches))
 
                         all_images = torch.cat(all_images_list, dim = 0)  # (b d h' w')
+
+                        all_images = rearrange(all_images, 'b d h w -> b h w d')
+                        all_images = self.pretrained_vq.project_out(all_images)
+                        all_images = rearrange(all_images, 'b h w d -> b d h w')
+
                         all_images = self.pretrained_decoder(all_images)  # (b c h w)
                         all_images = all_images.cpu().detach()
                         all_images = all_images.argmax(dim=1)[:,None,:,:].float()  # (b 1 h w)

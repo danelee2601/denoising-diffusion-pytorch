@@ -7,8 +7,8 @@ import wandb
 from einops import rearrange
 
 from encoder_decoders.vq_vae_encdec import VQVAEEncoder, VQVAEDecoder
-from experiments.exp_base import ExpBase, detach_the_unnecessary
 from vector_quantization import VectorQuantize
+from experiments.exp_base import ExpBase, detach_the_unnecessary
 from utils import freeze, timefreq_to_time, time_to_timefreq, zero_pad_low_freq, zero_pad_high_freq, quantize
 
 
@@ -43,7 +43,8 @@ class ExpVQVAE(ExpBase):
 
         # forward
         z = self.encoder(x)  # (b d h' w')
-        z_q, indices, vq_loss, perplexity = quantize(z, self.vq_model)
+        z_q, indices, vq_loss, perplexity = quantize(z, self.vq_model)  # z_q: (b d h' w')
+        z_q = z_q / z_q.abs().max(dim=1, keepdim=True).values  # normalize z_q to be within [-1, 1]
         vq_loss = vq_loss['loss']
         xhat = self.decoder(z_q)  # (b c h w)
 
@@ -83,7 +84,7 @@ class ExpVQVAE(ExpBase):
             fig, ax = plt.subplots(1, 1, figsize=(5, 2))
             ax.hist(z_q, bins='auto')
             plt.tight_layout()
-            wandb.log({"hist(z_1)": wandb.Image(plt)})
+            wandb.log({"hist(z_q)": wandb.Image(plt)})
             plt.close()
 
         return categorical_recons_loss, vq_loss, perplexity

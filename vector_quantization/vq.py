@@ -305,7 +305,7 @@ class VectorQuantize(nn.Module):
     def codebook(self):
         return self._codebook.embed
 
-    def forward(self, x):
+    def forward(self, x, return_z_q_before_proj_out: bool = False):
         """
         x: (B, N, D)
         """
@@ -360,7 +360,8 @@ class VectorQuantize(nn.Module):
             quantize = rearrange(quantize, '(b h) n d -> b n (h d)', h=heads)
             embed_ind = rearrange(embed_ind, '(b h) n -> b n h', h=heads)
 
-        quantize = self.project_out(quantize)
+        if not return_z_q_before_proj_out:
+            quantize = self.project_out(quantize)
 
         if need_transpose:
             quantize = rearrange(quantize, 'b n d -> b d n')

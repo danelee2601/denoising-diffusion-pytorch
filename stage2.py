@@ -54,16 +54,18 @@ if __name__ == '__main__':
     model = Unet(
         in_channels=config['VQ-VAE']['codebook_dim'],
         dim=64,
-        dim_mults=(1, 2, 4, 8)
+        dim_mults=(1, 2, 4, 8),
+        self_condition=config['diffusion']['unet']['self_condition'],
     ).cuda()
 
     diffusion = GaussianDiffusion(
         model,
         in_size=encoder.H_prime[0].item(),  # width or height of z
         timesteps=1000,  # number of steps
-        sampling_timesteps=250,
+        sampling_timesteps=1000,
         # number of sampling timesteps (using ddim for faster inference [see citation for ddim paper])
-        loss_type='l1'  # L1 or L2
+        loss_type='l1',  # L1 or L2
+        auto_normalize=False,
     ).cuda()
 
     # train
