@@ -47,6 +47,17 @@ class VQVAEEncBlock(nn.Module):
         return out
 
 
+def Upsample(dim_in, dim_out):
+    """
+    Better Deconvolution without the checkerboard problem [1].
+    [1] https://distill.pub/2016/deconv-checkerboard/
+    """
+    return nn.Sequential(
+        nn.Upsample(scale_factor = 2, mode = 'nearest'),
+        nn.Conv2d(dim_in, dim_out, 3, padding = 1)
+    )
+
+
 class VQVAEDecBlock(nn.Module):
     def __init__(self,
                  in_channels,
@@ -54,7 +65,8 @@ class VQVAEDecBlock(nn.Module):
                  ):
         super().__init__()
         self.block = nn.Sequential(
-            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1)),
+            # nn.ConvTranspose2d(in_channels, out_channels, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1)),
+            Upsample(in_channels, out_channels),
             nn.BatchNorm2d(out_channels),
             nn.LeakyReLU(inplace=True))
 
@@ -131,7 +143,8 @@ class VQVAEDecoder(nn.Module):
         self.decoder = nn.Sequential(
             *[nn.Sequential(ResBlock(d, d), nn.BatchNorm2d(d)) for _ in range(n_resnet_blocks)],
             *[VQVAEDecBlock(d, d) for _ in range(int(np.log2(downsample_rate)) - 1)],
-            nn.ConvTranspose2d(d, num_channels, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1)),
+            # nn.ConvTranspose2d(d, num_channels, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1)),
+            Upsample(d, num_channels),
             # nn.ConvTranspose2d(num_channels, num_channels, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1)),  # one more upsampling layer is added not to miss reconstruction details
         )
 
