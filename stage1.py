@@ -38,8 +38,8 @@ def train_stage1(config: dict,
         project_name += f'-{wandb_project_case_idx}'
 
     # fit
-    input_length = train_data_loader.dataset.X.shape[-1]
-    train_exp = ExpVQVAE(input_length, config, len(train_data_loader.dataset))
+    # img_size = train_data_loader.dataset.X.shape[-1]
+    train_exp = ExpVQVAE(config, len(train_data_loader.dataset))
     wandb_logger = WandbLogger(project=project_name, name=None, config=config)
     trainer = pl.Trainer(logger=wandb_logger,
                          enable_checkpointing=False,

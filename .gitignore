@@ -135,4 +135,3 @@ dmypy.json
 wandb/
 .idea/
 saved_models/
-dataset/

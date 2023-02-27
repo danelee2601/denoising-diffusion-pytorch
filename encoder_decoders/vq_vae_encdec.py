@@ -1,10 +1,13 @@
 """
 reference: https://github.com/nadavbh12/VQ-VAE/blob/master/vq_vae/auto_encoder.py
 """
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
+# import torch.nn.functional as F
+# import numpy as np
+# import einops
+# from denoising_diffusion_pytorch.denoising_diffusion_pytorch import LinearAttention, PreNorm, Residual
 
 
 class ResBlock(nn.Module):
@@ -143,20 +146,8 @@ class VQVAEDecoder(nn.Module):
         self.decoder = nn.Sequential(
             *[nn.Sequential(ResBlock(d, d), nn.BatchNorm2d(d)) for _ in range(n_resnet_blocks)],
             *[VQVAEDecBlock(d, d) for _ in range(int(np.log2(downsample_rate)) - 1)],
-            # nn.ConvTranspose2d(d, num_channels, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1)),
             Upsample(d, num_channels),
-            # nn.ConvTranspose2d(num_channels, num_channels, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1)),  # one more upsampling layer is added not to miss reconstruction details
         )
-
-        # self.is_upsample_size_updated = False
-        # self.register_buffer("upsample_size", torch.zeros(2))
-
-    # def register_upsample_size(self, hw: torch.IntTensor):
-    #     """
-    #     :param hw: (height H, width W) of input
-    #     """
-    #     self.upsample_size = hw
-    #     self.is_upsample_size_updated = True
 
     def forward(self, x):
         """
@@ -165,18 +156,9 @@ class VQVAEDecoder(nn.Module):
         """
         out = self.decoder(x)
         return out
-        # if isinstance(self.upsample_size, torch.Tensor):
-        #     upsample_size = self.upsample_size.cpu().numpy().astype(int)
-        #     upsample_size = [*upsample_size]
-        #     out = F.interpolate(out, size=upsample_size, mode='bilinear', align_corners=True)
-        #     return out
-        # else:
-        #     raise ValueError('self.upsample_size is not yet registered.')
 
 
 if __name__ == '__main__':
-    import numpy as np
-
     x = torch.rand(1, 2, 4, 128)  # (batch, channels, height, width)
 
     encoder = VQVAEEncoder(d=32, num_channels=2, downsample_rate=4, n_resnet_blocks=2)

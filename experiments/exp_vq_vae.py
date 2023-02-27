@@ -14,11 +14,9 @@ from utils import freeze, timefreq_to_time, time_to_timefreq, zero_pad_low_freq,
 
 class ExpVQVAE(ExpBase):
     def __init__(self,
-                 input_length: int,
                  config: dict,
                  n_train_samples: int):
         """
-        :param input_length: length of input time series
         :param config: configs/config.yaml
         :param n_train_samples: number of training samples
         """
