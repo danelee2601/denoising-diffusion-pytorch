@@ -1,6 +1,7 @@
 dataset:
 #  dataset_name: 'CBF'
   dirname: 'dataset/facies'
+  img_size: 128
   train_ratio: 0.7
   in_channels: 4
   data_scaling: True

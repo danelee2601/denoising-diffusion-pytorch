@@ -13,9 +13,10 @@ def load_pretrained_encoder_decoder_vq(config: dict, dirname, freeze_models: boo
     dim = config['encoder']['dim']
     in_channels = config['dataset']['in_channels']
     downsampling_rate = config['encoder']['downsampling_rate']
+    img_size = config['dataset']['img_size']
 
     encoder = VQVAEEncoder(dim, in_channels, downsampling_rate, config['encoder']['n_resnet_blocks'])
-    decoder = VQVAEDecoder(dim, in_channels, downsampling_rate, config['decoder']['n_resnet_blocks'])
+    decoder = VQVAEDecoder(dim, in_channels, downsampling_rate, config['decoder']['n_resnet_blocks'], img_size)
     vq_model = VectorQuantize(dim, **config['VQ-VAE'])
 
     encoder.load_state_dict(torch.load(os.path.join(dirname, 'encoder.ckpt')))

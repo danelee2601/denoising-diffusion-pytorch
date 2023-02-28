@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 # import torch.nn.functional as F
 # import numpy as np
-# import einops
+import einops
 # from denoising_diffusion_pytorch.denoising_diffusion_pytorch import LinearAttention, PreNorm, Residual
 
 
@@ -134,6 +134,7 @@ class VQVAEDecoder(nn.Module):
                  num_channels: int,
                  downsample_rate: int,
                  n_resnet_blocks: int,
+                 img_size: int,
                  **kwargs):
         """
         :param d: hidden dimension size
@@ -143,10 +144,15 @@ class VQVAEDecoder(nn.Module):
         :param kwargs:
         """
         super().__init__()
+        pos_emb_dim = d
+        self.pos_emb = torch.nn.parameter.Parameter(torch.randn(pos_emb_dim, img_size // downsample_rate, img_size // downsample_rate))
+
         self.decoder = nn.Sequential(
+            nn.Conv2d(d+pos_emb_dim, d, kernel_size=3, padding=1),
             *[nn.Sequential(ResBlock(d, d), nn.BatchNorm2d(d)) for _ in range(n_resnet_blocks)],
             *[VQVAEDecBlock(d, d) for _ in range(int(np.log2(downsample_rate)) - 1)],
             Upsample(d, num_channels),
+            nn.Conv2d(num_channels, num_channels, kernel_size=3, padding=1),
         )
 
     def forward(self, x):
@@ -154,6 +160,9 @@ class VQVAEDecoder(nn.Module):
         :param x: output from the encoder (B, C, H, W')
         :return  (B, C, H, W)
         """
+        pos_emb = einops.repeat(self.pos_emb, 'd h w -> b d h w', b=x.shape[0])
+        x = torch.cat((x, pos_emb), dim=1)
+
         out = self.decoder(x)
         return out
 

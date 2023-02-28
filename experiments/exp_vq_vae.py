@@ -14,6 +14,7 @@ from utils import freeze, timefreq_to_time, time_to_timefreq, zero_pad_low_freq,
 
 class ExpVQVAE(ExpBase):
     def __init__(self,
+                 img_size: int,
                  config: dict,
                  n_train_samples: int):
         """
@@ -33,7 +34,7 @@ class ExpVQVAE(ExpBase):
 
         # encoder
         self.encoder = VQVAEEncoder(dim, in_channels, downsampling_rate, config['encoder']['n_resnet_blocks'])
-        self.decoder = VQVAEDecoder(dim, in_channels, downsampling_rate, config['decoder']['n_resnet_blocks'])
+        self.decoder = VQVAEDecoder(dim, in_channels, downsampling_rate, config['decoder']['n_resnet_blocks'], img_size)
         self.vq_model = VectorQuantize(dim, **config['VQ-VAE'])
 
     def forward(self, batch):
