@@ -96,6 +96,7 @@ class GeoDataset(Dataset):
                     mu_beta=0,
                     sigma_beta=0.5,
                     lambda_s=4,
+                    vertical_only=True
                     ):
         """
         - Input:
@@ -103,15 +104,20 @@ class GeoDataset(Dataset):
         """
         height = facies.shape[1]
         x = np.arange(0, height)
-        cov = self.gram_matrix(x)
+        if not vertical_only:
+            cov = self.gram_matrix(x)
         s = np.random.poisson(lambda_s) + 1  # number of wells
         well_mat = np.zeros_like(facies)  # (c h w)
+        well_mat[0,:,:] = np.ones_like(well_mat)[0,:,:]  # (c h w)
         for _ in range(s):
             alpha = np.random.normal(mu_alpha, sigma_alpha)
             beta = np.random.normal(mu_beta, sigma_beta)
             mu = alpha + beta * x
-            residual = np.random.multivariate_normal(np.zeros(len(x)), cov)
-            sample = mu + residual
+            if not vertical_only:
+                residual = np.random.multivariate_normal(np.zeros(len(x)), cov)
+                sample = mu + residual
+            else:
+                sample = mu
             inds = np.where((sample < 128) & (sample > 0))[0]
             x_idx = x[inds]
             y_idx = sample.astype(int)[inds]
@@ -120,8 +126,10 @@ class GeoDataset(Dataset):
 
     def __getitem__(self, idx):
         x = self.X[idx, :]  # (c h w)
-        x = torch.from_numpy(x).float()  # (c h w)
         x_cond = self.x_to_x_cond(x)
+
+        x = torch.from_numpy(x).float()  # (c h w)
+        x_cond = torch.from_numpy(x_cond).float()  # (c h w)
         return x, x_cond
 
     def __len__(self):
