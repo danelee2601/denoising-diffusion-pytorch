@@ -83,16 +83,53 @@ class GeoDataset(Dataset):
 
         self._len = self.X.shape[0]
 
+    def rbf_kernel(self, x1, x2, scale=5000, sigma=100):
+        return sigma * np.exp(-1 * ((x1 - x2) ** 2) / (2 * scale))
+
+    def gram_matrix(self, xs):
+        return [[self.rbf_kernel(x1, x2) for x2 in xs] for x1 in xs]
+
+    def x_to_x_cond(self,
+                    facies,
+                    mu_alpha=50,
+                    sigma_alpha=20,
+                    mu_beta=0,
+                    sigma_beta=0.5,
+                    lambda_s=4,
+                    ):
+        """
+        - Input:
+            facies: (c h w)
+        """
+        height = facies.shape[1]
+        x = np.arange(0, height)
+        cov = self.gram_matrix(x)
+        s = np.random.poisson(lambda_s) + 1  # number of wells
+        well_mat = np.zeros_like(facies)  # (c h w)
+        for _ in range(s):
+            alpha = np.random.normal(mu_alpha, sigma_alpha)
+            beta = np.random.normal(mu_beta, sigma_beta)
+            mu = alpha + beta * x
+            residual = np.random.multivariate_normal(np.zeros(len(x)), cov)
+            sample = mu + residual
+            inds = np.where((sample < 128) & (sample > 0))[0]
+            x_idx = x[inds]
+            y_idx = sample.astype(int)[inds]
+            well_mat[:, x_idx, y_idx] = facies[:, x_idx, y_idx]
+        return well_mat
+
     def __getitem__(self, idx):
         x = self.X[idx, :]  # (c h w)
-        x = torch.from_numpy(x).float()
-        return x
+        x = torch.from_numpy(x).float()  # (c h w)
+        x_cond = self.x_to_x_cond(x)
+        return x, x_cond
 
     def __len__(self):
         return self._len
 
 
 if __name__ == "__main__":
+    import matplotlib.pyplot as plt
     from torch.utils.data import DataLoader
     os.chdir("../")
 
@@ -104,6 +141,17 @@ if __name__ == "__main__":
 
     # get a mini-batch of samples
     for batch in data_loader:
-        x = batch
+        x, x_cond = batch
         break
     print('x.shape:', x.shape)
+    print('x_cond.shape:', x_cond.shape)
+
+    # plot
+    b = 0
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    axes[0].imshow(x[b].argmax(dim=0))
+    axes[0].invert_yaxis()
+    axes[1].imshow(x_cond[b].argmax(dim=0))
+    axes[1].invert_yaxis()
+    plt.tight_layout()
+    plt.show()
