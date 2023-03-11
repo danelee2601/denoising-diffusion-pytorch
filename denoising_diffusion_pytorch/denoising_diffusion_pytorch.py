@@ -383,7 +383,7 @@ class Unet(nn.Module):
         # net_cond=None,
     ):
         super().__init__()
-        self.net_cond = UnetCond(in_channels, dim, init_dim, dim_mults, self_condition, resnet_block_groups)
+        # self.net_cond = UnetCond(in_channels, dim, init_dim, dim_mults, self_condition, resnet_block_groups)
 
         # determine dimensions
         self.channels = in_channels
@@ -424,7 +424,7 @@ class Unet(nn.Module):
         self.ups = nn.ModuleList([])
         num_resolutions = len(in_out)
 
-        m = 2
+        m = 1
         for ind, (dim_in, dim_out) in enumerate(in_out):
             is_last = ind >= (num_resolutions - 1)
 
@@ -467,8 +467,9 @@ class Unet(nn.Module):
             x = torch.cat((x_self_cond, x), dim = 1)
 
         # initial convolution
+        # xc = self.net_cond.init_conv(x_cond)
+        # x = torch.cat((x, x_cond), dim=1)
         x = self.init_conv(x)
-        xc = self.net_cond.init_conv(x_cond)
         r = x.clone()
 
         # time conditioning
@@ -476,53 +477,53 @@ class Unet(nn.Module):
 
         # go through the layers of the unet, down and up
         h = []
-        h_cond = []
-        for (block1, block2, attn, downsample), (block1_c, block2_c, attn_c, downsample_c) in zip(self.downs, self.net_cond.downs):
-            xc = block1_c(xc, t)
-            x = torch.cat((x, xc), dim=1)
+        # h_cond = []
+        for (block1, block2, attn, downsample) in self.downs:
+            # xc = block1_c(xc, t)
+            # x = torch.cat((x, xc), dim=1)
             x = block1(x, t)
             h.append(x)
-            h_cond.append(xc)
+            # h_cond.append(xc)
 
-            xc = block2_c(xc, t)
-            x = torch.cat((x, xc), dim=1)
+            # xc = block2_c(xc, t)
+            # x = torch.cat((x, xc), dim=1)
             x = block2(x, t)
 
-            xc = attn_c(xc)
+            # xc = attn_c(xc)
             x = attn(x)
             h.append(x)
-            h_cond.append(xc)
+            # h_cond.append(xc)
 
-            xc = downsample_c(xc)
+            # xc = downsample_c(xc)
             x = downsample(x)
 
-        xc = self.net_cond.mid_block1(xc, t)
-        x = torch.cat((x, xc), dim=1)
+        # xc = self.net_cond.mid_block1(xc, t)
+        # x = torch.cat((x, xc), dim=1)
         x = self.mid_block1(x, t)
 
-        xc = self.net_cond.mid_attn(xc)
+        # xc = self.net_cond.mid_attn(xc)
         # x = torch.cat((x, xc), dim=1)
         x = self.mid_attn(x)
 
-        xc = self.net_cond.mid_block2(xc, t)
-        x = torch.cat((x, xc), dim=1)
+        # xc = self.net_cond.mid_block2(xc, t)
+        # x = torch.cat((x, xc), dim=1)
         x = self.mid_block2(x, t)
 
-        for (block1, block2, attn, upsample), (block1_c, block2_c, attn_c, upsample_c) in zip(self.ups, self.net_cond.ups):
-            xc = torch.cat((xc, h_cond.pop()), dim=1)
-            xc = block1_c(xc, t)
-            x = torch.cat((x, h.pop(), xc), dim = 1)
+        for (block1, block2, attn, upsample) in self.ups:
+            # xc = torch.cat((xc, h_cond.pop()), dim=1)
+            # xc = block1_c(xc, t)
+            x = torch.cat((x, h.pop()), dim = 1)
             x = block1(x, t)
 
-            xc = torch.cat((xc, h_cond.pop()), dim=1)
-            xc = block2_c(xc, t)
-            x = torch.cat((x, h.pop(), xc), dim = 1)
+            # xc = torch.cat((xc, h_cond.pop()), dim=1)
+            # xc = block2_c(xc, t)
+            x = torch.cat((x, h.pop()), dim = 1)
             x = block2(x, t)
 
-            xc = attn(xc)
+            # xc = attn(xc)
             x = attn(x)
 
-            xc = upsample_c(xc)
+            # xc = upsample_c(xc)
             x = upsample(x)
 
         x = torch.cat((x, r), dim = 1)
