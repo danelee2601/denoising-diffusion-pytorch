@@ -64,6 +64,9 @@ def train_stage1(config: dict,
     save_model({'encoder': train_exp.encoder,
                 'decoder': train_exp.decoder,
                 'vq_model': train_exp.vq_model,
+                'encoder_cond': train_exp.encoder_cond,
+                'decoder_cond': train_exp.decoder_cond,
+                'vq_model_cond': train_exp.vq_model_cond,
                 })
 
 

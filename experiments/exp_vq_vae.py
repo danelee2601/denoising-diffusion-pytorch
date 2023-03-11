@@ -52,6 +52,8 @@ class ExpVQVAE(ExpBase):
             encoder = self.encoder_cond
             decoder = self.decoder_cond
             vq_model = self.vq_model_cond
+        else:
+            raise ValueError
 
         # forward
         z = encoder(x)  # (b d h' w')
