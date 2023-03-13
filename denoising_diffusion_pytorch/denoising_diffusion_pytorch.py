@@ -938,10 +938,12 @@ class Trainer(object):
                 total_loss = 0.
 
                 for _ in range(self.gradient_accumulate_every):
-                    x = next(self.dl).to(device)  # I assume (b c h w)
+                    x, x_cond = next(self.dl)  # I assume (b c h w)
+                    x = x.to(device)
+                    # x, x_cond = x.to(device), x_cond.to(device)
+
                     z = self.pretrained_encoder(x)  # (b d h' w')
                     z_q, indices, vq_loss, perplexity = quantize(z, self.pretrained_vq, return_z_q_before_proj_out=True)
-                    z_q = z_q / z_q.abs().max(dim=1, keepdim=True).values  # normalize z_q to be within [-1, 1]
 
                     with self.accelerator.autocast():
                         loss = self.model(z_q)

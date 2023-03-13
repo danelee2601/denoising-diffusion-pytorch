@@ -84,7 +84,7 @@ if __name__ == '__main__':
         ema_decay=0.995,  # exponential moving average decay
         amp=False,  # turn on mixed precision
         fp16=False,
-        save_and_sample_every=1000, #1000,
+        save_and_sample_every=100, #1000,
         num_samples=9,
         augment_horizontal_flip=False
     )

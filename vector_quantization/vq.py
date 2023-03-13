@@ -305,7 +305,7 @@ class VectorQuantize(nn.Module):
     def codebook(self):
         return self._codebook.embed
 
-    def forward(self, x, return_z_q_before_proj_out: bool = False):
+    def forward(self, x, normalized=True, return_z_q_before_proj_out: bool = False):
         """
         x: (B, N, D)
         """
@@ -359,6 +359,9 @@ class VectorQuantize(nn.Module):
         if is_multiheaded:
             quantize = rearrange(quantize, '(b h) n d -> b n (h d)', h=heads)
             embed_ind = rearrange(embed_ind, '(b h) n -> b n h', h=heads)
+
+        if normalized:
+            quantize = quantize / quantize.detach().abs().max(dim=-1, keepdim=True).values  # normalize z_q to be within [-1, 1]; (b n d); .detach() makes the training stable, otherwise, falls into a nan loss.
 
         if not return_z_q_before_proj_out:
             quantize = self.project_out(quantize)
