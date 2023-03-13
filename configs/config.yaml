@@ -7,7 +7,7 @@ dataset:
   data_scaling: True
   batch_sizes:
     stage1: 256
-    stage2: 256
+    stage2: 128
   num_workers: 0
 
 exp_params:
