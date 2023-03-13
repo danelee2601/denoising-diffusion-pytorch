@@ -157,9 +157,12 @@ if __name__ == "__main__":
     # plot
     b = 0
     fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-    axes[0].imshow(x[b].argmax(dim=0))
+    im = axes[0].imshow(x[b].argmax(dim=0), interpolation='nearest')
+    plt.colorbar(im, ax=axes[0])
     axes[0].invert_yaxis()
-    axes[1].imshow(x_cond[b].argmax(dim=0))
+
+    im = axes[1].imshow(x_cond[b].argmax(dim=0), interpolation='nearest')
+    plt.colorbar(im, ax=axes[1])
     axes[1].invert_yaxis()
     plt.tight_layout()
     plt.show()
