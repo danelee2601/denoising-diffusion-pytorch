@@ -888,7 +888,7 @@ def save_image(
     """
     n_samples = Xhat.shape[0]
     n_rows = int(np.ceil(np.sqrt(n_samples)))
-    fig, axes = plt.subplots(nrows=n_rows, ncols=n_rows * 2, figsize=(12*2, 12))
+    fig, axes = plt.subplots(nrows=n_rows, ncols=n_rows * 3, figsize=(12*3, 12))
     # axes = axes.flatten()
 
     X_cond = np.flip(X_cond.numpy(), axis=2)  # (b 1 h w)
@@ -901,21 +901,26 @@ def save_image(
     sample_idx = 0
     for i in range(n_rows):
         for j in range(n_rows):
+            # x
             x_cond = X_cond[sample_idx]  # (h w)
             axes[i, j].imshow(x_cond, interpolation='nearest', vmin=0, vmax=n_colors-1)
             axes[i, j].set_xticks([])
             axes[i, j].set_yticks([])
 
+            # xhat
             xhat = Xhat[sample_idx]  # (h w)
             axes[i, n_rows+j].imshow(xhat, interpolation='nearest', vmin=0, vmax=n_colors-1)
             axes[i, n_rows+j].set_xticks([])
             axes[i, n_rows+j].set_yticks([])
 
-            # # diff
-            # cond_loc = (x_cond != 0).astype(int)  # (h w)
-            # diff = cond_loc - (xhat * cond_loc)
-
-
+            # diff(x, xhat)
+            cond_loc = (x_cond != 0).astype(int)  # (h w)
+            # diff = np.abs(cond_loc - (xhat * cond_loc))  # (h w)
+            diff = np.abs(x_cond - (xhat * cond_loc))  # (h w)
+            diff = np.clip(diff, a_min=0, a_max=1)
+            axes[i, 2*n_rows + j].imshow(diff, interpolation='nearest', vmin=0, vmax=1)
+            axes[i, 2*n_rows + j].set_xticks([])
+            axes[i, 2*n_rows + j].set_yticks([])
 
             sample_idx += 1
     plt.tight_layout()
