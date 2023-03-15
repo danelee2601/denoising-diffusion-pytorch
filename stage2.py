@@ -68,6 +68,7 @@ if __name__ == '__main__':
         dim=64,
         dim_mults=(1, 2, 4, 8),
         self_condition=config['diffusion']['unet']['self_condition'],
+        z_size=encoder.H_prime[0].item(),  # width or height of z
     ).cuda()
 
     diffusion = GaussianDiffusion(

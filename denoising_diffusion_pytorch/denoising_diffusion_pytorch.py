@@ -352,8 +352,8 @@ class Unet(nn.Module):
         learned_sinusoidal_cond = False,
         random_fourier_features = False,
         learned_sinusoidal_dim = 16,
-        # conditional_net=False,
-        # net_cond=None,
+        p_unconditional=0.1,
+        z_size: int = None,
     ):
         super().__init__()
         self.net_cond = UnetCond(in_channels, dim, init_dim, dim_mults, self_condition, resnet_block_groups)
@@ -418,6 +418,10 @@ class Unet(nn.Module):
         self.final_res_block = block_klass(dim * 2, dim, time_emb_dim = time_dim)
         self.final_conv = nn.Conv2d(dim, self.out_dim, 1)
 
+        # mask token
+        self.p_unconditional = p_unconditional
+        self.mask_token = nn.Parameter(torch.randn((in_channels, z_size, z_size)))  # (d h' w')
+
     def forward(self, x, time, x_self_cond = None, x_cond=None):
         """
         Input:
@@ -427,6 +431,10 @@ class Unet(nn.Module):
         if self.self_condition:
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
             x = torch.cat((x_self_cond, x), dim = 1)
+
+        if (self.training and np.random.rand() < self.p_unconditional) or (x_cond == None):
+            mask_token = einops.repeat(self.mask_token, 'd h w -> b d h w', b=x.shape[0])
+            x_cond = mask_token
 
         # initial convolution
         x = self.init_conv(x)
@@ -720,7 +728,7 @@ class GaussianDiffusion(nn.Module):
         return pred_img, x_start
 
     @torch.no_grad()
-    def p_sample_loop(self, z_q_cond, shape, return_all_timesteps = False):
+    def p_sample_loop(self, shape, z_q_cond=None, return_all_timesteps = False):
         batch, device = shape[0], self.betas.device
 
         img = torch.randn(shape, device = device)
@@ -782,10 +790,10 @@ class GaussianDiffusion(nn.Module):
         return ret
 
     @torch.no_grad()
-    def sample(self, z_q_cond, batch_size = 16, return_all_timesteps = False):
+    def sample(self, z_q_cond=None, batch_size = 16, return_all_timesteps = False):
         in_size, channels = self.in_size, self.channels
         sample_fn = self.p_sample_loop if not self.is_ddim_sampling else self.ddim_sample
-        return sample_fn(z_q_cond, shape=(batch_size, channels, in_size, in_size), return_all_timesteps = return_all_timesteps)
+        return sample_fn(shape=(batch_size, channels, in_size, in_size), z_q_cond=z_q_cond, return_all_timesteps = return_all_timesteps)
 
     @torch.no_grad()
     def interpolate(self, x1, x2, t = None, lam = 0.5):
@@ -927,6 +935,40 @@ def save_image(
     plt.savefig(fp)
     plt.close()
 
+
+@torch.no_grad()
+def save_image_unconditional(
+    Xhat: torch.FloatTensor,
+    fp,
+) -> None:
+    """
+    :param X_cond (b 1 h w)
+    :param Xhat (b 1 h w)
+    :param fp: file name for the saved image.
+    """
+    n_samples = Xhat.shape[0]
+    n_rows = int(np.ceil(np.sqrt(n_samples)))
+    fig, axes = plt.subplots(nrows=n_rows, ncols=n_rows * 1, figsize=(12*1, 12))
+    # axes = axes.flatten()
+
+    Xhat = np.flip(Xhat.numpy(), axis=2)  # (b 1 h w)
+    Xhat = Xhat.squeeze()  # (b h w)
+
+    # color range
+    n_colors = len(np.unique(Xhat))
+    sample_idx = 0
+    for i in range(n_rows):
+        for j in range(n_rows):
+            # xhat
+            xhat = Xhat[sample_idx]  # (h w)
+            axes[i, j].imshow(xhat, interpolation='nearest', vmin=0, vmax=n_colors-1)
+            axes[i, j].set_xticks([])
+            axes[i, j].set_yticks([])
+
+            sample_idx += 1
+    plt.tight_layout()
+    plt.savefig(fp)
+    plt.close()
 
 class Trainer(object):
     def __init__(

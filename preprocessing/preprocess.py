@@ -21,7 +21,7 @@ class DatasetImporter(object):
     def __init__(self,
                  dirname,
                  train_ratio: float = 0.7,
-                 data_scaling: bool = True,
+                 data_scaling: bool = False,
                  **kwargs):
         """
         :param data_scaling
@@ -155,14 +155,15 @@ if __name__ == "__main__":
     print('x_cond.shape:', x_cond.shape)
 
     # plot
-    b = 0
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-    im = axes[0].imshow(x[b].argmax(dim=0), interpolation='nearest')
-    plt.colorbar(im, ax=axes[0])
-    axes[0].invert_yaxis()
+    n_samples = 10
+    for b in range(n_samples):
+        fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+        im = axes[0].imshow(x[b].argmax(dim=0), interpolation='nearest')
+        plt.colorbar(im, ax=axes[0])
+        axes[0].invert_yaxis()
 
-    im = axes[1].imshow(x_cond[b].argmax(dim=0), interpolation='nearest')
-    plt.colorbar(im, ax=axes[1])
-    axes[1].invert_yaxis()
-    plt.tight_layout()
-    plt.show()
+        im = axes[1].imshow(x_cond[b].argmax(dim=0), interpolation='nearest')
+        plt.colorbar(im, ax=axes[1])
+        axes[1].invert_yaxis()
+        plt.tight_layout()
+        plt.show()

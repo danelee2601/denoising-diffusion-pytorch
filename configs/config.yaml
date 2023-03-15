@@ -6,7 +6,7 @@ dataset:
   in_channels: 4
   data_scaling: True
   batch_sizes:
-    stage1: 256
+    stage1: 128
     stage2: 128
   num_workers: 0
 
