@@ -696,7 +696,7 @@ class GaussianDiffusion(nn.Module):
 
         return ModelPrediction(pred_noise, x_start)
 
-    def p_mean_variance(self, x, t, x_self_cond = None, z_q_cond=None, clip_denoised = False, dynamic_thresholding = True):
+    def p_mean_variance(self, x, t, x_self_cond = None, z_q_cond=None, clip_denoised = True, dynamic_thresholding = False):
         assert np.sum([clip_denoised, dynamic_thresholding]) <= 1, "Only one of `clip_denoised` and `dynamic_thresholding` must be used, not both."
 
         preds = self.model_predictions(x, t, x_self_cond, z_q_cond)
@@ -996,7 +996,8 @@ class Trainer(object):
         fp16 = False,
         use_lion = False,
         split_batches = True,
-        convert_image_to = None
+        convert_image_to = None,
+        dataset_type = 'train',
     ):
         super().__init__()
 
@@ -1027,7 +1028,8 @@ class Trainer(object):
         # dataset and dataloader
         # self.ds = Dataset(folder, self.in_size, augment_horizontal_flip = augment_horizontal_flip, convert_image_to = convert_image_to)
         dataset_importer = DatasetImporter(**config['dataset'])
-        self.ds = Dataset('train', dataset_importer)
+        assert dataset_type in ['train', 'test']
+        self.ds = Dataset(dataset_type, dataset_importer)
         # self.dl = DataLoader(self.ds, batch_size = train_batch_size, shuffle = True, pin_memory = True, num_workers = cpu_count())
         self.dl = DataLoader(self.ds, batch_size=train_batch_size, shuffle=True, pin_memory=True, num_workers=config['dataset']['num_workers'])
 
