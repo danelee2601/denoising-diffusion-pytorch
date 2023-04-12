@@ -674,8 +674,8 @@ class GaussianDiffusion(nn.Module):
         posterior_log_variance_clipped = extract(self.posterior_log_variance_clipped, t, x_t.shape)
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
 
-    def model_predictions(self, x, t, x_self_cond = None, z_q_cond=None, clip_x_start = False):
-        model_output = self.model(x, t, x_self_cond, z_q_cond)
+    def model_predictions(self, x, t, x_self_cond = None, z_cond=None, clip_x_start = False):
+        model_output = self.model(x, t, x_self_cond, z_cond)
         maybe_clip = partial(torch.clamp, min = -1., max = 1.) if clip_x_start else identity
 
         if self.objective == 'pred_noise':
@@ -696,10 +696,10 @@ class GaussianDiffusion(nn.Module):
 
         return ModelPrediction(pred_noise, x_start)
 
-    def p_mean_variance(self, x, t, x_self_cond = None, z_q_cond=None, clip_denoised = True, dynamic_thresholding = False):
+    def p_mean_variance(self, x, t, x_self_cond = None, z_cond=None, clip_denoised = True, dynamic_thresholding = False):
         assert np.sum([clip_denoised, dynamic_thresholding]) <= 1, "Only one of `clip_denoised` and `dynamic_thresholding` must be used, not both."
 
-        preds = self.model_predictions(x, t, x_self_cond, z_q_cond)
+        preds = self.model_predictions(x, t, x_self_cond, z_cond)
         x_start = preds.pred_x_start  # (b d h' w')
 
         if clip_denoised:
@@ -716,19 +716,19 @@ class GaussianDiffusion(nn.Module):
         return model_mean, posterior_variance, posterior_log_variance, x_start
 
     @torch.no_grad()
-    def p_sample(self, x, t: int, x_self_cond = None, z_q_cond=None):
+    def p_sample(self, x, t: int, x_self_cond = None, z_cond=None):
         b, *_, device = *x.shape, x.device
         batched_times = torch.full((b,), t, device = x.device, dtype = torch.long)
         model_mean, _, model_log_variance, x_start = self.p_mean_variance(x = x,
                                                                           t = batched_times,
                                                                           x_self_cond = x_self_cond,
-                                                                          z_q_cond=z_q_cond)
+                                                                          z_cond=z_cond)
         noise = torch.randn_like(x) if t > 0 else 0. # no noise if t == 0
         pred_img = model_mean + (0.5 * model_log_variance).exp() * noise
         return pred_img, x_start
 
     @torch.no_grad()
-    def p_sample_loop(self, shape, z_q_cond=None, return_all_timesteps = False):
+    def p_sample_loop(self, shape, z_cond=None, return_all_timesteps = False):
         batch, device = shape[0], self.betas.device
 
         img = torch.randn(shape, device = device)
@@ -738,7 +738,7 @@ class GaussianDiffusion(nn.Module):
 
         for t in tqdm(reversed(range(0, self.num_timesteps)), desc = 'sampling loop time step', total = self.num_timesteps):
             self_cond = x_start if self.self_condition else None
-            img, x_start = self.p_sample(img, t, self_cond, z_q_cond)
+            img, x_start = self.p_sample(img, t, self_cond, z_cond)
             imgs.append(img)
 
         ret = img if not return_all_timesteps else torch.stack(imgs, dim = 1)
@@ -790,10 +790,10 @@ class GaussianDiffusion(nn.Module):
         return ret
 
     @torch.no_grad()
-    def sample(self, z_q_cond=None, batch_size = 16, return_all_timesteps = False):
+    def sample(self, z_cond=None, batch_size = 16, return_all_timesteps = False):
         in_size, channels = self.in_size, self.channels
         sample_fn = self.p_sample_loop if not self.is_ddim_sampling else self.ddim_sample
-        return sample_fn(shape=(batch_size, channels, in_size, in_size), z_q_cond=z_q_cond, return_all_timesteps = return_all_timesteps)
+        return sample_fn(shape=(batch_size, channels, in_size, in_size), z_cond=z_cond, return_all_timesteps = return_all_timesteps)
 
     @torch.no_grad()
     def interpolate(self, x1, x2, t = None, lam = 0.5):
@@ -1106,13 +1106,13 @@ class Trainer(object):
                     x, x_cond = x.to(device), x_cond.to(device)
 
                     z = self.pretrained_encoder(x)  # (b d h' w')
-                    z_q, indices, vq_loss, perplexity = quantize(z, self.pretrained_vq, return_z_q_before_proj_out=True)
+                    # z_q, indices, vq_loss, perplexity = quantize(z, self.pretrained_vq, return_z_q_before_proj_out=True)
 
                     z_cond = self.pretrained_encoder_cond(x_cond)  # (b c h' w')
-                    z_q_cond, _, _, _ = quantize(z_cond, self.pretrained_vq_cond, return_z_q_before_proj_out=True)
+                    # z_q_cond, _, _, _ = quantize(z_cond, self.pretrained_vq_cond, return_z_q_before_proj_out=True)
 
                     with self.accelerator.autocast():
-                        loss = self.model(z_q, z_q_cond)
+                        loss = self.model(z, z_cond)  #self.model(z_q, z_q_cond)
                         loss = loss / self.gradient_accumulate_every
                         total_loss += loss.item()
 
@@ -1135,6 +1135,7 @@ class Trainer(object):
                     self.ema.update()
 
                     if self.step != 0 and self.step % self.save_and_sample_every == 0:
+                        # sample
                         self.ema.ema_model.eval()
 
                         # z_q_cond
@@ -1145,22 +1146,31 @@ class Trainer(object):
                             X_cond.append(x_cond.numpy())
                         X_cond = torch.from_numpy(np.array(X_cond))  # (b c h w); b == num_samples
                         z_cond = self.pretrained_encoder_cond(X_cond.to(device))  # (b c h' w')
-                        z_q_cond, _, _, _ = quantize(z_cond, self.pretrained_vq_cond, return_z_q_before_proj_out=True)
+                        # z_q_cond, _, _, _ = quantize(z_cond, self.pretrained_vq_cond, return_z_q_before_proj_out=True)
 
                         with torch.no_grad():
                             milestone = self.step // self.save_and_sample_every
                             batches = num_to_groups(self.num_samples, self.batch_size)
-                            all_images_list = list(map(lambda n: self.ema.ema_model.sample(z_q_cond, batch_size=n), batches))
+                            # all_images_list = list(map(lambda n: self.ema.ema_model.sample(z_q_cond, batch_size=n), batches))
+                            all_zs_list = list(map(lambda n: self.ema.ema_model.sample(z_cond, batch_size=n), batches))
 
-                        all_images = torch.cat(all_images_list, dim = 0)  # (b d h' w')
+                        all_zs = torch.cat(all_zs_list, dim = 0)  # (b d h' w')
 
-                        all_images = rearrange(all_images, 'b d h w -> b h w d')
-                        all_images = self.pretrained_vq.project_out(all_images)
-                        all_images = rearrange(all_images, 'b h w d -> b d h w')
+                        # apply vq
+                        all_zqs, _, _, _ = quantize(all_zs, self.pretrained_vq)  # z_q: (b d h' w')
 
-                        all_images = self.pretrained_decoder(all_images)  # (b c h w)
+                        # apply decoder
+                        all_images = self.pretrained_decoder(all_zqs)  # (b c h w)
                         all_images = all_images.cpu().detach()
-                        all_images = all_images.argmax(dim=1)[:,None,:,:].float()  # (b 1 h w)
+                        all_images = all_images.argmax(dim=1)[:, None, :, :].float()  # (b 1 h w)
+
+                        # all_images = rearrange(all_images, 'b d h w -> b h w d')
+                        # all_images = self.pretrained_vq.project_out(all_images)
+                        # all_images = rearrange(all_images, 'b h w d -> b d h w')
+                        #
+                        # all_images = self.pretrained_decoder(all_images)  # (b c h w)
+                        # all_images = all_images.cpu().detach()
+                        # all_images = all_images.argmax(dim=1)[:,None,:,:].float()  # (b 1 h w)
                         X_cond = X_cond.argmax(dim=1)[:, None, :, :].float()  # (b 1 h w)
                         save_image(X_cond, all_images, str(self.results_folder / f'sample-{milestone}.png'))
                         self.save(milestone)

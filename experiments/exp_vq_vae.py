@@ -27,19 +27,20 @@ class ExpVQVAE(ExpBase):
 
         # self.n_fft = config['VQ-VAE']['n_fft']
         dim = config['encoder']['dim']
+        bottleneck_dim = config['encoder']['bottleneck_dim']
         in_channels = config['dataset']['in_channels']
         # downsampled_width = config['encoder']['downsampled_width']
         # downsample_rate = compute_downsample_rate(input_length, downsampled_width)
         downsampling_rate = config['encoder']['downsampling_rate']
 
         # encoder
-        self.encoder = VQVAEEncoder(dim, in_channels, downsampling_rate, config['encoder']['n_resnet_blocks'], config['encoder']['output_norm'])
-        self.decoder = VQVAEDecoder(dim, in_channels, downsampling_rate, config['decoder']['n_resnet_blocks'], img_size)
-        self.vq_model = VectorQuantize(dim, **config['VQ-VAE'])
+        self.encoder = VQVAEEncoder(dim, bottleneck_dim, in_channels, downsampling_rate, config['encoder']['n_resnet_blocks'], config['encoder']['output_norm'])
+        self.decoder = VQVAEDecoder(dim, bottleneck_dim, in_channels, downsampling_rate, config['decoder']['n_resnet_blocks'], img_size)
+        self.vq_model = VectorQuantize(bottleneck_dim, **config['VQ-VAE'])
 
-        self.encoder_cond = VQVAEEncoder(dim, in_channels, downsampling_rate, config['encoder']['n_resnet_blocks'], config['encoder']['output_norm'])
-        self.decoder_cond = VQVAEDecoder(dim, in_channels, downsampling_rate, config['decoder']['n_resnet_blocks'], img_size)
-        self.vq_model_cond = VectorQuantize(dim, **config['VQ-VAE'])
+        self.encoder_cond = VQVAEEncoder(dim, bottleneck_dim, in_channels, downsampling_rate, config['encoder']['n_resnet_blocks'], config['encoder']['output_norm'])
+        self.decoder_cond = VQVAEDecoder(dim, bottleneck_dim, in_channels, downsampling_rate, config['decoder']['n_resnet_blocks'], img_size)
+        self.vq_model_cond = VectorQuantize(bottleneck_dim, **config['VQ-VAE'])
 
     def forward(self, x, kind):
         assert kind in ['x', 'x_cond']

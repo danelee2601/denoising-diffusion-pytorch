@@ -11,13 +11,14 @@ from utils import load_yaml_param_settings, get_root_dir, freeze
 
 def load_pretrained_encoder_decoder_vq(config: dict, dirname, freeze_models: bool = True, load_cond_models=False):
     dim = config['encoder']['dim']
+    bottleneck_dim = config['encoder']['bottleneck_dim']
     in_channels = config['dataset']['in_channels']
     downsampling_rate = config['encoder']['downsampling_rate']
     img_size = config['dataset']['img_size']
 
-    encoder = VQVAEEncoder(dim, in_channels, downsampling_rate, config['encoder']['n_resnet_blocks'])
-    decoder = VQVAEDecoder(dim, in_channels, downsampling_rate, config['decoder']['n_resnet_blocks'], img_size)
-    vq_model = VectorQuantize(dim, **config['VQ-VAE'])
+    encoder = VQVAEEncoder(dim, bottleneck_dim, in_channels, downsampling_rate, config['encoder']['n_resnet_blocks'], config['encoder']['output_norm'])
+    decoder = VQVAEDecoder(dim, bottleneck_dim, in_channels, downsampling_rate, config['decoder']['n_resnet_blocks'], img_size)
+    vq_model = VectorQuantize(bottleneck_dim, **config['VQ-VAE'])
 
     if not load_cond_models:
         encoder_fname = 'encoder.ckpt'
@@ -64,7 +65,7 @@ if __name__ == '__main__':
 
     # model
     model = Unet(
-        in_channels=config['VQ-VAE']['codebook_dim'],
+        in_channels=config['encoder']['bottleneck_dim'],
         dim=64,
         dim_mults=(1, 2, 4, 8),
         self_condition=config['diffusion']['unet']['self_condition'],

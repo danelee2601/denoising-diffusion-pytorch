@@ -85,6 +85,7 @@ class VQVAEEncoder(nn.Module):
 
     def __init__(self,
                  d: int,
+                 bottleneck_d: int,
                  num_channels: int,
                  downsample_rate: int,
                  n_resnet_blocks: int,
@@ -105,6 +106,7 @@ class VQVAEEncoder(nn.Module):
             VQVAEEncBlock(num_channels, d),
             *[VQVAEEncBlock(d, d) for _ in range(int(np.log2(downsample_rate)) - 1)],
             *[nn.Sequential(ResBlock(d, d, bn=bn), nn.BatchNorm2d(d)) for _ in range(n_resnet_blocks)],
+            nn.Conv2d(d, bottleneck_d, kernel_size=1)
         )
 
         self.is_num_tokens_updated = False
@@ -137,6 +139,7 @@ class VQVAEDecoder(nn.Module):
 
     def __init__(self,
                  d: int,
+                 bottleneck_d: int,
                  num_channels: int,
                  downsample_rate: int,
                  n_resnet_blocks: int,
@@ -150,11 +153,12 @@ class VQVAEDecoder(nn.Module):
         :param kwargs:
         """
         super().__init__()
-        pos_emb_dim = d
+        pos_emb_dim = bottleneck_d
         self.pos_emb = torch.nn.parameter.Parameter(torch.randn(pos_emb_dim, img_size // downsample_rate, img_size // downsample_rate))
 
         self.decoder = nn.Sequential(
-            nn.Conv2d(d+pos_emb_dim, d, kernel_size=3, padding=1),
+            nn.Conv2d(bottleneck_d+pos_emb_dim, d, kernel_size=1),
+            nn.Conv2d(d, d, kernel_size=3, padding=1),
             *[nn.Sequential(ResBlock(d, d), nn.BatchNorm2d(d)) for _ in range(n_resnet_blocks)],
             *[VQVAEDecBlock(d, d) for _ in range(int(np.log2(downsample_rate)) - 1)],
             Upsample(d, num_channels),
@@ -174,10 +178,10 @@ class VQVAEDecoder(nn.Module):
 
 
 if __name__ == '__main__':
-    x = torch.rand(1, 2, 4, 128)  # (batch, channels, height, width)
+    x = torch.rand(1, 4, 128, 128)  # (batch, channels, height, width)
 
-    encoder = VQVAEEncoder(d=32, num_channels=2, downsample_rate=4, n_resnet_blocks=2)
-    decoder = VQVAEDecoder(d=32, num_channels=2, downsample_rate=4, n_resnet_blocks=2)
+    encoder = VQVAEEncoder(d=64, bottleneck_d=4, num_channels=4, downsample_rate=4, n_resnet_blocks=4, output_norm=True)
+    decoder = VQVAEDecoder(d=64, bottleneck_d=4, num_channels=4, downsample_rate=4, n_resnet_blocks=4, img_size=128)
     decoder.upsample_size = torch.IntTensor(np.array(x.shape[2:]))
 
     z = encoder(x)

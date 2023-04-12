@@ -245,7 +245,7 @@ class VectorQuantize(nn.Module):
             self,
             dim,
             codebook_size,
-            codebook_dim=None,
+            # codebook_dim=None,
             heads=1,
             decay=0.8,
             eps=1e-5,
@@ -265,12 +265,12 @@ class VectorQuantize(nn.Module):
     ):
         super().__init__()
         self.heads = heads
-        codebook_dim = default(codebook_dim, dim)
+        codebook_dim = dim  #default(codebook_dim, dim)
         codebook_input_dim = codebook_dim * heads
 
-        requires_projection = codebook_input_dim != dim
-        self.project_in = nn.Linear(dim, codebook_input_dim) if requires_projection else nn.Identity()
-        self.project_out = nn.Linear(codebook_input_dim, dim) if requires_projection else nn.Identity()
+        # requires_projection = codebook_input_dim != dim
+        # self.project_in = nn.Identity()  # nn.Linear(dim, codebook_input_dim) if requires_projection else nn.Identity()
+        # self.project_out = nn.Identity()  # nn.Linear(codebook_input_dim, dim) if requires_projection else nn.Identity()
 
         self.eps = eps
         self.commitment_weight = commitment_weight
@@ -305,7 +305,7 @@ class VectorQuantize(nn.Module):
     def codebook(self):
         return self._codebook.embed
 
-    def forward(self, x, return_z_q_before_proj_out: bool = False):
+    def forward(self, x):
         """
         x: (B, N, D)
         """
@@ -323,7 +323,7 @@ class VectorQuantize(nn.Module):
         if need_transpose:
             x = rearrange(x, 'b d n -> b n d')
 
-        x = self.project_in(x)
+        # x = self.project_in(x)
 
         if is_multiheaded:
             x = rearrange(x, 'b n (h d) -> (b h) n d', h=heads)
@@ -360,8 +360,8 @@ class VectorQuantize(nn.Module):
             quantize = rearrange(quantize, '(b h) n d -> b n (h d)', h=heads)
             embed_ind = rearrange(embed_ind, '(b h) n -> b n h', h=heads)
 
-        if not return_z_q_before_proj_out:
-            quantize = self.project_out(quantize)
+        # if not return_z_q_before_proj_out:
+        #     quantize = self.project_out(quantize)
 
         if need_transpose:
             quantize = rearrange(quantize, 'b n d -> b d n')
