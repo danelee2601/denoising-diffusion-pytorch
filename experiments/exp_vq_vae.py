@@ -33,11 +33,11 @@ class ExpVQVAE(ExpBase):
         downsampling_rate = config['encoder']['downsampling_rate']
 
         # encoder
-        self.encoder = VQVAEEncoder(dim, in_channels, downsampling_rate, config['encoder']['n_resnet_blocks'])
+        self.encoder = VQVAEEncoder(dim, in_channels, downsampling_rate, config['encoder']['n_resnet_blocks'], config['encoder']['output_norm'])
         self.decoder = VQVAEDecoder(dim, in_channels, downsampling_rate, config['decoder']['n_resnet_blocks'], img_size)
         self.vq_model = VectorQuantize(dim, **config['VQ-VAE'])
 
-        self.encoder_cond = VQVAEEncoder(dim, in_channels, downsampling_rate, config['encoder']['n_resnet_blocks'])
+        self.encoder_cond = VQVAEEncoder(dim, in_channels, downsampling_rate, config['encoder']['n_resnet_blocks'], config['encoder']['output_norm'])
         self.decoder_cond = VQVAEDecoder(dim, in_channels, downsampling_rate, config['decoder']['n_resnet_blocks'], img_size)
         self.vq_model_cond = VectorQuantize(dim, **config['VQ-VAE'])
 
@@ -92,19 +92,19 @@ class ExpVQVAE(ExpBase):
                 wandb.log({"x_cond vs xhat_cond (training)": wandb.Image(plt)})
             plt.close()
 
-        # # plot histogram of z
-        # r = np.random.rand()
-        # if self.training and r <= 0.05:
-        #     z_q = z_q.detach().cpu().flatten().numpy()
-        #
-        #     fig, ax = plt.subplots(1, 1, figsize=(5, 2))
-        #     ax.hist(z_q, bins='auto')
-        #     plt.tight_layout()
-        #     if kind == 'x':
-        #         wandb.log({"hist(z_q)": wandb.Image(plt)})
-        #     elif kind == 'x_cond':
-        #         wandb.log({"hist(z_q_cond)": wandb.Image(plt)})
-        #     plt.close()
+        # plot histogram of z
+        r = np.random.rand()
+        if self.training and r <= 0.05:
+            z = z.detach().cpu().flatten().numpy()
+
+            fig, ax = plt.subplots(1, 1, figsize=(5, 2))
+            ax.hist(z, bins='auto')
+            plt.tight_layout()
+            if kind == 'x':
+                wandb.log({"hist(z)": wandb.Image(plt)})
+            elif kind == 'x_cond':
+                wandb.log({"hist(z_cond)": wandb.Image(plt)})
+            plt.close()
 
         return categorical_recons_loss, vq_loss, perplexity
 

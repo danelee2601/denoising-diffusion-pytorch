@@ -271,7 +271,6 @@ class VectorQuantize(nn.Module):
         requires_projection = codebook_input_dim != dim
         self.project_in = nn.Linear(dim, codebook_input_dim) if requires_projection else nn.Identity()
         self.project_out = nn.Linear(codebook_input_dim, dim) if requires_projection else nn.Identity()
-        self.project_norm = nn.Linear(codebook_input_dim, codebook_input_dim)
 
         self.eps = eps
         self.commitment_weight = commitment_weight
@@ -306,7 +305,7 @@ class VectorQuantize(nn.Module):
     def codebook(self):
         return self._codebook.embed
 
-    def forward(self, x, normalized=True, return_z_q_before_proj_out: bool = False):
+    def forward(self, x, return_z_q_before_proj_out: bool = False):
         """
         x: (B, N, D)
         """
@@ -360,10 +359,6 @@ class VectorQuantize(nn.Module):
         if is_multiheaded:
             quantize = rearrange(quantize, '(b h) n d -> b n (h d)', h=heads)
             embed_ind = rearrange(embed_ind, '(b h) n -> b n h', h=heads)
-
-        if normalized:
-            quantize = self.project_norm(quantize)  # stablizes the training by preventing the nan loss
-            quantize = quantize / quantize.abs().max(dim=-1, keepdim=True).values  # normalize z_q to be within [-1, 1]; (b n d)
 
         if not return_z_q_before_proj_out:
             quantize = self.project_out(quantize)

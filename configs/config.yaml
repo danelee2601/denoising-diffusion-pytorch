@@ -1,8 +1,7 @@
 dataset:
-#  dataset_name: 'CBF'
-  dirname: 'dataset/facies'
+  dirname: 'dataset/facies_200'  #'dataset/facies'
   img_size: 128
-  train_ratio: 0.7
+  train_ratio: 0.8
   in_channels: 4
   data_scaling: True
   batch_sizes:
@@ -26,6 +25,7 @@ encoder:
   dim: 64
   n_resnet_blocks: 4
   downsampling_rate: 4  # the actual compression rate is `downsampling_rate ** 2` given both height and width.
+  output_norm: True
 
 decoder:
   dim: 64

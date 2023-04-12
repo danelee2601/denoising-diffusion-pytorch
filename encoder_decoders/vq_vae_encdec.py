@@ -88,6 +88,7 @@ class VQVAEEncoder(nn.Module):
                  num_channels: int,
                  downsample_rate: int,
                  n_resnet_blocks: int,
+                 output_norm: bool,
                  bn: bool = True,
                  **kwargs):
         """
@@ -99,6 +100,7 @@ class VQVAEEncoder(nn.Module):
         :param kwargs:
         """
         super().__init__()
+        self.output_norm = output_norm
         self.encoder = nn.Sequential(
             VQVAEEncBlock(num_channels, d),
             *[VQVAEEncBlock(d, d) for _ in range(int(np.log2(downsample_rate)) - 1)],
@@ -115,13 +117,17 @@ class VQVAEEncoder(nn.Module):
         :param x: (B, C, H, W)
         :return (B, C, H, W') where W' <= W
         """
-        out = self.encoder(x)
+        z = self.encoder(x)
+
+        if self.output_norm:
+            z = z / z.abs().max(dim=1, keepdim=True).values  # (b c h w'); normalize `z` to be within [-1, 1]
+
         if not self.is_num_tokens_updated:
-            self.H_prime += out.shape[2]
-            self.W_prime += out.shape[3]
+            self.H_prime += z.shape[2]
+            self.W_prime += z.shape[3]
             self.num_tokens += self.H_prime * self.W_prime
             self.is_num_tokens_updated = True
-        return out
+        return z
 
 
 class VQVAEDecoder(nn.Module):
